@@ -24,6 +24,7 @@ function App() {
   const [jiraError, setJiraError] = useState<string | null>(null)
   const [isJiraLoading, setIsJiraLoading] = useState<boolean>(false)
   const [jiraConnected, setJiraConnected] = useState<boolean>(false)
+  const [selectedJiraStoryKey, setSelectedJiraStoryKey] = useState<string | null>(null)
 
   const toggleTestCaseExpansion = (testCaseId: string) => {
     const newExpanded = new Set(expandedTestCases)
@@ -77,6 +78,7 @@ function App() {
     setJiraError(null)
     setIsJiraLoading(false)
     setJiraConnected(false)
+    setSelectedJiraStoryKey(null)
   }
 
   const handleJiraInputChange = (field: 'baseUrl' | 'email' | 'apiToken', value: string) => {
@@ -110,6 +112,24 @@ function App() {
     } finally {
       setIsJiraLoading(false)
     }
+  }
+
+  const handleAddJiraStoryToForm = (story: JiraStory) => {
+    setFormData(prev => ({
+      ...prev,
+      storyTitle: story.key,
+      summary: story.summary,
+      description: story.description === 'No description provided.' ? '' : story.description,
+      acceptanceCriteria: '',
+      additionalInfo: [
+        `Jira status: ${story.status}`,
+        `Assignee: ${story.assignee}`,
+        `Jira issue: ${story.url}`
+      ].join('\n')
+    }))
+    setSelectedJiraStoryKey(story.key)
+    setError(null)
+    setResults(null)
   }
 
   const handleDownload = () => {
@@ -703,6 +723,39 @@ function App() {
           text-decoration: underline;
         }
 
+        .jira-story-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-top: 12px;
+        }
+
+        .jira-add-btn {
+          border: 1px solid rgba(0,200,83,0.35);
+          border-radius: 9px;
+          padding: 8px 11px;
+          background: var(--brand-soft);
+          color: var(--brand-darker);
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s, transform 0.15s;
+        }
+
+        .jira-add-btn:hover {
+          background: #d5f2df;
+          border-color: var(--brand);
+          transform: translateY(-1px);
+        }
+
+        .jira-add-btn.selected {
+          background: var(--brand);
+          border-color: var(--brand);
+          color: #fff;
+          cursor: default;
+        }
+
         .results-actions {
           display: flex;
           justify-content: flex-end;
@@ -968,6 +1021,12 @@ function App() {
 
               {jiraError && <div className="jira-error">{jiraError}</div>}
 
+              {selectedJiraStoryKey && !jiraError && (
+                <div className="jira-status-message">
+                  {selectedJiraStoryKey} added to the form. Enter Acceptance Criteria before generating test cases.
+                </div>
+              )}
+
               {jiraConnected && jiraStories.length > 0 && (
                 <div className="jira-stories">
                   <div className="jira-stories-title">Available Jira User Stories</div>
@@ -980,9 +1039,19 @@ function App() {
                       <h4 className="jira-story-summary">{story.summary}</h4>
                       <p className="jira-story-meta"><strong>Assignee:</strong> {story.assignee}</p>
                       <p className="jira-story-description">{story.description}</p>
-                      <a className="jira-story-link" href={story.url} target="_blank" rel="noreferrer">
-                        Open in Jira
-                      </a>
+                      <div className="jira-story-actions">
+                        <a className="jira-story-link" href={story.url} target="_blank" rel="noreferrer">
+                          Open in Jira
+                        </a>
+                        <button
+                          type="button"
+                          className={`jira-add-btn ${selectedJiraStoryKey === story.key ? 'selected' : ''}`}
+                          onClick={() => handleAddJiraStoryToForm(story)}
+                          disabled={selectedJiraStoryKey === story.key}
+                        >
+                          {selectedJiraStoryKey === story.key ? 'Added to form' : 'Add to form'}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
