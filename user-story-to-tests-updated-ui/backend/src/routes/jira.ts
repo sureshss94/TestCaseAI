@@ -3,6 +3,16 @@ import { JiraConnectionRequestSchema, JiraStoriesResponseSchema, JiraStoriesResp
 
 export const jiraRouter = express.Router()
 
+function extractJiraText(value: any): string {
+  if (typeof value === 'string') return value
+  if (!value) return ''
+  if (typeof value.text === 'string') return value.text
+  if (Array.isArray(value.content)) {
+    return value.content.map((item: any) => extractJiraText(item)).join(' ').trim()
+  }
+  return ''
+}
+
 jiraRouter.post('/', async (req: express.Request, res: express.Response): Promise<void> => {
   try {
     // Validate request body
@@ -20,7 +30,29 @@ jiraRouter.post('/', async (req: express.Request, res: express.Response): Promis
 
     // Build Basic auth header
     const authHeader = `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`
+    const jiraHeaders = {
+      Accept: 'application/json',
+      Authorization: authHeader,
+      'Content-Type': 'application/json',
+    }
     const searchUrl = `${baseUrlNormalized}/rest/api/3/search/jql`
+
+    let acceptanceCriteriaFieldId: string | null = null
+    try {
+      const fieldsResponse = await fetch(`${baseUrlNormalized}/rest/api/3/field`, {
+        method: 'GET',
+        headers: jiraHeaders,
+      })
+      if (fieldsResponse.ok) {
+        const fields = await fieldsResponse.json() as Array<{ id?: string; name?: string }>
+        const acceptanceField = fields.find((field) =>
+          field.id && field.name?.trim().toLowerCase() === 'acceptance criteria'
+        )
+        acceptanceCriteriaFieldId = acceptanceField?.id || null
+      }
+    } catch {
+      // Acceptance criteria remains empty if Jira field metadata is unavailable.
+    }
 
     // Fetch from Jira API
     let jiraResponse: Response
@@ -28,14 +60,18 @@ jiraRouter.post('/', async (req: express.Request, res: express.Response): Promis
       jiraResponse = await fetch(searchUrl, {
         method: 'POST',
         headers: {
-          Accept: 'application/json',
-          Authorization: authHeader,
-          'Content-Type': 'application/json',
+          ...jiraHeaders,
         },
         body: JSON.stringify({
           jql: 'issuetype = Story ORDER BY created DESC',
           maxResults: 20,
-          fields: ['summary', 'status', 'assignee', 'description'],
+          fields: [
+            'summary',
+            'status',
+            'assignee',
+            'description',
+            ...(acceptanceCriteriaFieldId ? [acceptanceCriteriaFieldId] : []),
+          ],
         }),
       })
     } catch (fetchError) {
@@ -80,22 +116,10 @@ jiraRouter.post('/', async (req: express.Request, res: express.Response): Promis
 
     // Map and normalize stories
     const stories = issues.map((issue: any) => {
-      const descriptionValue = issue.fields?.description
-      let description = 'No description provided.'
-
-      if (typeof descriptionValue === 'string') {
-        description = descriptionValue
-      } else if (descriptionValue && Array.isArray(descriptionValue.content)) {
-        description = descriptionValue.content
-          .map((node: any) => {
-            if (Array.isArray(node.content)) {
-              return node.content.map((child: any) => child.text || '').join(' ')
-            }
-            return node.text || ''
-          })
-          .join(' ')
-          .trim() || 'No description provided.'
-      }
+      const description = extractJiraText(issue.fields?.description) || 'No description provided.'
+      const acceptanceCriteria = acceptanceCriteriaFieldId
+        ? extractJiraText(issue.fields?.[acceptanceCriteriaFieldId])
+        : ''
 
       return {
         id: issue.id || issue.key || 'unknown',
@@ -104,6 +128,7 @@ jiraRouter.post('/', async (req: express.Request, res: express.Response): Promis
         status: issue.fields?.status?.name || 'Unknown',
         assignee: issue.fields?.assignee?.displayName || 'Unassigned',
         description,
+        acceptanceCriteria,
         url: `${baseUrlNormalized}/browse/${issue.key}`,
       }
     })
