@@ -117,10 +117,10 @@ function App() {
   const handleAddJiraStoryToForm = (story: JiraStory) => {
     setFormData(prev => ({
       ...prev,
-      storyTitle: story.key,
-      summary: story.summary,
-      description: story.description === 'No description provided.' ? '' : story.description,
-      acceptanceCriteria: '',
+      storyTitle: story.summary,
+      summary: story.description === 'No description provided.' ? '' : story.description,
+      description: '',
+      acceptanceCriteria: story.acceptanceCriteria,
       additionalInfo: [
         `Jira status: ${story.status}`,
         `Assignee: ${story.assignee}`,

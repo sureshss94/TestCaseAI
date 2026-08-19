@@ -37,6 +37,7 @@ export const JiraStorySchema = z.object({
   status: z.string(),
   assignee: z.string(),
   description: z.string(),
+  acceptanceCriteria: z.string(),
   url: z.string()
 })
 

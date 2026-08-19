@@ -19,6 +19,7 @@ export interface JiraStory {
   status: string
   assignee: string
   description: string
+  acceptanceCriteria: string
   url: string
 }
 
